@@ -8,8 +8,24 @@ export async function POST(request: Request) {
   const expectedUsername = process.env.ADMIN_USERNAME;
   const expectedPassword = process.env.ADMIN_PASSWORD;
   const secret = process.env.ADMIN_SESSION_SECRET;
+  const environmentReady = Boolean(
+    expectedUsername && expectedPassword && secret
+  );
+  const credentialsMatch = Boolean(
+    environmentReady &&
+      username === expectedUsername &&
+      password === expectedPassword
+  );
 
-  if (!expectedUsername || !expectedPassword || !secret || username !== expectedUsername || password !== expectedPassword) {
+  console.info("Admin login attempt", {
+    environmentReady,
+    usernameConfigured: Boolean(expectedUsername),
+    passwordConfigured: Boolean(expectedPassword),
+    sessionSecretConfigured: Boolean(secret),
+    credentialsMatch,
+  });
+
+  if (!credentialsMatch || !secret) {
     return NextResponse.redirect(new URL("/admin/login?error=invalid", request.url), 303);
   }
 

@@ -7,7 +7,17 @@ export async function proxy(request: NextRequest) {
 
   const secret = process.env.ADMIN_SESSION_SECRET;
   const token = request.cookies.get("kaamsetu_admin_session")?.value;
-  if (secret && token && (await verifyAdminSessionToken(token, secret))) return NextResponse.next();
+  const sessionValid = Boolean(
+    secret && token && (await verifyAdminSessionToken(token, secret))
+  );
+  if (sessionValid) return NextResponse.next();
+
+  console.warn("Admin access redirected to login", {
+    sessionSecretConfigured: Boolean(secret),
+    sessionCookiePresent: Boolean(token),
+    sessionValid,
+    path,
+  });
 
   return NextResponse.redirect(new URL("/admin/login", request.url));
 }
