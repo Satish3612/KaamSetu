@@ -123,7 +123,7 @@ export default function ServiceRequest() {
 
   const { data: professional, error: professionalError } = await supabase
     .from("professionals")
-    .select("id")
+    .select("id, profile_id")
     .eq("id", selectedProfessionalId)
     .eq("service_id", selectedServiceId)
     .eq("verification_status", "verified")
@@ -136,6 +136,24 @@ export default function ServiceRequest() {
   }
 
   if (!professional) {
+    alert("Selected professional is no longer available. Please select again.");
+    return;
+  }
+
+  const { data: activeProfile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", professional.profile_id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("Professional account verification error:", profileError);
+    alert("Professional verify nahi ho pa raha hai. Kripya dobara koshish karein.");
+    return;
+  }
+
+  if (!activeProfile) {
     alert("Selected professional is no longer available. Please select again.");
     return;
   }
