@@ -13,35 +13,18 @@ type SupabaseErrorDetails = {
   message?: unknown;
   code?: unknown;
   details?: unknown;
-  hint?: unknown;
+  constraint?: unknown;
 };
 
-function formatRegistrationError(error: unknown) {
-  if (typeof error === "string") {
-    return error;
-  }
+function isDuplicateMobileError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false;
 
-  if (typeof error === "object" && error !== null) {
-    const { message, code, details, hint } = error as SupabaseErrorDetails;
-    const errorDetails = [
-      typeof message === "string" && message,
-      typeof code === "string" && `Code: ${code}`,
-      typeof details === "string" && `Details: ${details}`,
-      typeof hint === "string" && `Hint: ${hint}`,
-    ].filter(Boolean);
+  const { message, code, details, constraint } = error as SupabaseErrorDetails;
+  const errorText = [message, details, constraint]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
 
-    if (errorDetails.length > 0) {
-      return errorDetails.join("\n");
-    }
-
-    try {
-      return JSON.stringify(error) || "Unknown error";
-    } catch {
-      return "Unknown error";
-    }
-  }
-
-  return "Unknown error";
+  return code === "23505" && errorText.includes("profiles_mobile_key");
 }
 
 export default function ProfessionalRegister() {
@@ -132,13 +115,14 @@ export default function ProfessionalRegister() {
   } catch (error: unknown) {
     console.error("Professional registration error:", error);
 
-    const errorMessage = formatRegistrationError(error);
+    if (isDuplicateMobileError(error)) {
+      alert(
+        "Yeh mobile number pehle se registered hai. Kripya doosra mobile number use karein."
+      );
+      return;
+    }
 
-    alert(
-      `Registration save nahi hui.\n\nError: ${
-        errorMessage
-      }`
-    );
+    alert("Registration save nahi hui. Kripya dobara koshish karein.");
   }
 }
 
