@@ -17,6 +17,35 @@ export default function ServiceRequest() {
   const [selectedProfessionalName, setSelectedProfessionalName] = useState("");
   const [selectionLoading, setSelectionLoading] = useState(true);
   const [selectionError, setSelectionError] = useState("");
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationSource, setLocationSource] = useState<"gps" | "manual">("manual");
+  const [locationMessage, setLocationMessage] = useState("");
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  function captureLocation() {
+    if (!("geolocation" in navigator)) {
+      setLocationMessage("Location access nahi mili. Kripya address manually enter karein.");
+      return;
+    }
+    setGettingLocation(true);
+    setLocationMessage("Getting your location...");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude);
+        setLongitude(position.coords.longitude);
+        setLocationSource("gps");
+        setLocationMessage("Location captured successfully.");
+        setGettingLocation(false);
+      },
+      () => {
+        setLatitude(null); setLongitude(null); setLocationSource("manual");
+        setLocationMessage("Location access nahi mili. Kripya address manually enter karein.");
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 }
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +131,7 @@ export default function ServiceRequest() {
 
   if (professionalError) {
     console.error("Professional verification error:", professionalError);
-    alert(`Professional verification failed: ${professionalError.message}`);
+    alert("Professional verify nahi ho pa raha hai. Kripya dobara koshish karein.");
     return;
   }
 
@@ -111,7 +140,28 @@ export default function ServiceRequest() {
     return;
   }
 
-  const { error } = await supabase
+  const requestPayload = {
+      professional_id: selectedProfessionalId,
+      service_id: selectedServiceId,
+      name: formData.get("name") as string,
+      customer_name: formData.get("name") as string,
+      mobile: formData.get("mobile") as string,
+      customer_mobile: formData.get("mobile") as string,
+      service: selectedServiceName,
+      problem: formData.get("problem") as string,
+      problem_description: formData.get("problem") as string,
+      country: formData.get("country") as string,
+      state: formData.get("state") as string,
+      district: formData.get("district") as string,
+      city: formData.get("city") as string,
+      area: formData.get("area") as string,
+      pincode: formData.get("pincode") as string,
+      address: formData.get("address") as string,
+      preferred_time: formData.get("preferredTime") as string,
+      status: "open",
+  };
+
+  let { error } = await supabase
     .from("service_requests")
     .insert({
       // Selected professional
@@ -148,11 +198,19 @@ export default function ServiceRequest() {
 
       // Initial request status
       status: "open",
+      latitude,
+      longitude,
+      location_source: locationSource,
     });
+
+  if (error?.code === "PGRST204") {
+    console.error("Location columns are not migrated yet; saving legacy request:", error);
+    ({ error } = await supabase.from("service_requests").insert(requestPayload));
+  }
 
   if (error) {
     console.error("Supabase error:", error);
-    alert(`Supabase Error: ${error.message}`);
+    alert("Service request save nahi hui. Kripya dobara koshish karein.");
     return;
   }
 
@@ -338,6 +396,17 @@ export default function ServiceRequest() {
             <h2 className="text-xl font-bold text-slate-900">
               4. Service Location
             </h2>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={captureLocation} disabled={gettingLocation} className="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60">
+                {gettingLocation ? "Getting your location..." : "Use My Current Location"}
+              </button>
+              <button type="button" onClick={() => { setLatitude(null); setLongitude(null); setLocationSource("manual"); setLocationMessage("Enter your address below."); }} className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 hover:bg-slate-50">
+                Enter Address Manually
+              </button>
+            </div>
+            {locationMessage && <p className={`mt-3 text-sm ${locationSource === "gps" ? "text-emerald-700" : "text-slate-600"}`}>{locationMessage}</p>}
+            <p className="mt-3 text-xs text-slate-500">Your location is used only to help the assigned professional reach you.</p>
 
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
 

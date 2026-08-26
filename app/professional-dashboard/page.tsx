@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useSearchParams } from "next/navigation";
+import CurrentDateTime from "@/components/CurrentDateTime";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +17,7 @@ type ServiceRequest = {
   customer_name: string | null;
   customer_mobile: string | null;
   problem_description: string | null;
+  service: string | null;
   country: string | null;
   state: string | null;
   district: string | null;
@@ -26,6 +28,8 @@ type ServiceRequest = {
   preferred_time: string | null;
   status: string;
   created_at: string;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 const nextStatus: Partial<Record<JobStatus, JobStatus>> = {
@@ -54,6 +58,9 @@ function ProfessionalDashboardContent() {
   const [loading, setLoading] = useState(true);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [locationUpdatedAt, setLocationUpdatedAt] = useState<string | null>(null);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +73,16 @@ function ProfessionalDashboardContent() {
       const { data, error: queryError } = await supabase
         .from("service_requests")
         .select(
-          "id, customer_name, customer_mobile, problem_description, country, state, district, city, area, pincode, address, preferred_time, status, created_at"
+          "id, customer_name, customer_mobile, service, problem_description, country, state, district, city, area, pincode, address, preferred_time, status, created_at, latitude, longitude"
         )
         .eq("professional_id", professionalId)
         .order("created_at", { ascending: false });
+
+      const { data: professionalLocation, error: professionalLocationError } = await supabase
+        .from("professionals")
+        .select("location_updated_at")
+        .eq("id", professionalId)
+        .maybeSingle();
 
       if (cancelled) {
         return;
@@ -77,9 +90,14 @@ function ProfessionalDashboardContent() {
 
       if (queryError) {
         console.error("Jobs load error:", queryError);
-        setError(queryError.message);
+        setError("Jobs load nahi ho pa rahe hain. Kripya dobara koshish karein.");
       } else {
         setJobs((data || []) as ServiceRequest[]);
+      }
+      if (professionalLocationError) {
+        console.error("Professional location timestamp load error:", professionalLocationError);
+      } else {
+        setLocationUpdatedAt(professionalLocation?.location_updated_at || null);
       }
 
       setLoading(false);
@@ -91,6 +109,24 @@ function ProfessionalDashboardContent() {
       cancelled = true;
     };
   }, [professionalId]);
+
+  function updateCurrentLocation() {
+    if (!professionalId || !("geolocation" in navigator)) {
+      setLocationMessage("Location access available nahi hai."); return;
+    }
+    setUpdatingLocation(true); setLocationMessage("Getting your location...");
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const updatedAt = new Date().toISOString();
+      const { error: locationError } = await supabase.from("professionals").update({ current_latitude: position.coords.latitude, current_longitude: position.coords.longitude, location_updated_at: updatedAt }).eq("id", professionalId);
+      if (locationError) {
+        console.error("Professional location update error:", locationError);
+        setLocationMessage("Location save nahi hui. Admin ko location migration run karni hogi.");
+      } else {
+        setLocationUpdatedAt(updatedAt); setLocationMessage("Current location updated successfully.");
+      }
+      setUpdatingLocation(false);
+    }, () => { setLocationMessage("Location access nahi mili. Browser permission check karein."); setUpdatingLocation(false); }, { enableHighAccuracy: true, timeout: 15_000 });
+  }
 
   async function updateJobStatus(job: ServiceRequest) {
     const status = job.status as JobStatus;
@@ -115,7 +151,7 @@ function ProfessionalDashboardContent() {
 
     if (updateError) {
       console.error("Job status update error:", updateError);
-      setError(updateError.message);
+      setError("Job status update nahi hua. Kripya dobara koshish karein.");
       setUpdatingJobId(null);
       return;
     }
@@ -148,11 +184,17 @@ function ProfessionalDashboardContent() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">My Jobs</h1>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div><h1 className="text-3xl font-bold text-slate-900">My Jobs</h1>
           <p className="mt-2 text-slate-600">
             Assigned service requests ko manage karein.
-          </p>
+          </p></div><CurrentDateTime />
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-bold text-slate-900">Update My Current Location</h2><p className="mt-1 text-sm text-slate-500">Manual one-time update only. Continuous tracking is not used.</p></div><button type="button" onClick={updateCurrentLocation} disabled={updatingLocation} className="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white hover:bg-blue-800 disabled:opacity-60">{updatingLocation ? "Updating..." : "Update My Current Location"}</button></div>
+          {locationMessage && <p className="mt-3 text-sm text-blue-700">{locationMessage}</p>}
+          {locationUpdatedAt && <p className="mt-1 text-xs text-slate-500">Location last updated: {new Date(locationUpdatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</p>}
         </div>
 
         {error && (
@@ -203,6 +245,7 @@ function ProfessionalDashboardContent() {
                   </div>
 
                   <div className="grid gap-5 pt-5 md:grid-cols-2">
+                    <div><p className="text-sm text-slate-500">Service</p><p className="mt-1 font-semibold text-slate-800">{job.service || "-"}</p></div>
                     <div>
                       <p className="text-sm text-slate-500">Problem</p>
                       <p className="mt-1 font-semibold text-slate-800">
@@ -221,7 +264,10 @@ function ProfessionalDashboardContent() {
                         {getLocation(job)}
                       </p>
                     </div>
+                    <div><p className="text-sm text-slate-500">Pincode</p><p className="mt-1 font-semibold text-slate-800">{job.pincode || "-"}</p></div>
                   </div>
+
+                  {job.latitude !== null && job.longitude !== null ? <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${job.latitude},${job.longitude}`)}`} target="_blank" rel="noreferrer" className="mt-6 inline-flex rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 font-bold text-blue-700 hover:bg-blue-100">Navigate to Customer</a> : <p className="mt-5 text-sm font-medium text-amber-700">GPS location not provided — use customer address.</p>}
 
                   {newStatus && (
                     <button

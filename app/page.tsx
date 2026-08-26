@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import PublicFooter from "@/components/PublicFooter";
+import PublicNavbar from "@/components/PublicNavbar";
 
 const serviceCards = [
   {
@@ -98,8 +100,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white">
+      <PublicNavbar showDateTime />
+      <header className="hidden">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div>
             <div className="text-2xl font-bold tracking-tight text-blue-700">
@@ -140,16 +142,18 @@ export default function Home() {
             </div>
 
             <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl">
-              Ghar ke har kaam ke liye
-              <span className="block text-blue-700">
-                trusted professional.
-              </span>
+              Har Kaam Ka <span className="text-blue-700">Verified Expert</span>
             </h1>
 
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-              KaamSetu aapko aapke area ke verified service professionals se
-              connect karta hai — simple, reliable aur convenient.
+              Apne area ke verified service professionals se aasani se connect karein.
             </p>
+
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
+              <a href="#services" className="rounded-xl bg-blue-700 px-6 py-3 font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800">Find Expert</a>
+              <Link href="/professionals" className="rounded-xl border border-blue-200 bg-white px-6 py-3 font-bold text-blue-700 hover:bg-blue-50">View Professionals</Link>
+              <Link href="/professional-register" className="rounded-xl border border-slate-300 px-6 py-3 font-bold text-slate-700 hover:bg-white">Join as Professional</Link>
+            </div>
 
             {/* Search Box */}
             <div className="mx-auto mt-10 max-w-3xl rounded-2xl bg-white p-3 shadow-xl ring-1 ring-slate-200">
@@ -385,8 +389,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-slate-950 py-8 text-slate-400">
+      <PublicFooter />
+      <footer className="hidden">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-6 text-sm md:flex-row">
           <div>
             <div className="font-bold text-white">KaamSetu</div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import AdminNav from "@/components/AdminNav";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,6 +21,7 @@ const STATUS_OPTIONS = [
 type ServiceRequest = {
   id: string;
   service_id: string | null;
+  service: string | null;
     professional_id: string | null;
   customer_name: string | null;
   customer_mobile: string | null;
@@ -35,6 +37,8 @@ type ServiceRequest = {
   status: string;
   created_at: string;
   updated_at: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 export default function AdminServiceRequestPage() {
@@ -77,7 +81,9 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
         preferred_time,
         status,
         created_at,
-        updated_at
+        updated_at,
+        latitude,
+        longitude
         `
       )
       .order("created_at", { ascending: false });
@@ -90,9 +96,7 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
   );
 
   console.error("SERVICE REQUEST ERROR:", errorText);
-  alert(`Service request error:\n${errorText}`);
-
-  setError(errorText);
+  setError("Service requests load nahi ho pa rahi hain. Kripya dobara koshish karein.");
   setRequests([]);
   setLoading(false);
   return;
@@ -132,7 +136,7 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
 
   if (error) {
     console.error("Professional assignment error:", error);
-    setError(`Professional assignment failed: ${error.message}`);
+    setError("Professional assignment nahi hui. Kripya dobara koshish karein.");
     setAssigningId(null);
     return;
   }
@@ -166,7 +170,7 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
 
     if (error) {
       console.error("Status update error:", error);
-      setError(`Status update failed: ${error.message}`);
+      setError("Status update nahi hua. Kripya dobara koshish karein.");
       setUpdatingId(null);
       return;
     }
@@ -215,6 +219,8 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
           `
         id,
         service_id,
+        service,
+        service,
         professional_id,
         customer_name,
         customer_mobile,
@@ -229,7 +235,9 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
         preferred_time,
         status,
         created_at,
-        updated_at
+        updated_at,
+        latitude,
+        longitude
         `
         )
         .order("created_at", { ascending: false });
@@ -246,8 +254,7 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
         );
 
         console.error("SERVICE REQUEST ERROR:", errorText);
-        alert(`Service request error:\n${errorText}`);
-        setError(errorText);
+        setError("Service requests load nahi ho pa rahi hain. Kripya dobara koshish karein.");
         setRequests([]);
       } else {
         setRequests((data || []) as ServiceRequest[]);
@@ -281,7 +288,8 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("id, full_name, mobile")
-        .in("id", profileIds);
+        .in("id", profileIds)
+        .eq("status", "active");
 
       if (cancelled || profileError) {
         if (profileError) {
@@ -317,6 +325,8 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
       <div className="mx-auto max-w-7xl">
+
+        <AdminNav />
 
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -474,7 +484,7 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
                       {/* Service */}
                       <td className="px-5 py-4">
                         <p className="text-sm text-slate-700">
-                          {request.service_id || "-"}
+                          {request.service || request.service_id || "-"}
                         </p>
                       </td>
 
@@ -482,6 +492,7 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
                       <td className="px-5 py-4">
                         <p className="text-sm text-slate-700">
                           {[
+                            request.address,
                             request.area,
                             request.city,
                             request.district,
@@ -495,6 +506,9 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
                           <p className="mt-1 text-xs text-slate-500">
                             PIN: {request.pincode}
                           </p>
+                        )}
+                        {request.latitude !== null && request.longitude !== null && (
+                          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${request.latitude},${request.longitude}`)}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-bold text-blue-700 hover:underline">Open Customer Location</a>
                         )}
                       </td>
 
