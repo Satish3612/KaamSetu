@@ -32,6 +32,43 @@ type ServiceRequest = {
   longitude: number | null;
 };
 
+const JOB_COLUMNS = "id, customer_name, customer_mobile, service, problem_description, country, state, district, city, area, pincode, address, preferred_time, status, created_at";
+
+async function fetchJobs(professionalId: string) {
+  const locationResult = await supabase
+    .from("service_requests")
+    .select(`${JOB_COLUMNS}, latitude, longitude`)
+    .eq("professional_id", professionalId)
+    .order("created_at", { ascending: false });
+
+  if (locationResult.error?.code !== "42703" ||
+      !/service_requests\.(latitude|longitude)/.test(locationResult.error.message)) {
+    return locationResult;
+  }
+
+  console.error("Optional customer location columns unavailable:", {
+    code: locationResult.error.code,
+    message: locationResult.error.message,
+    details: locationResult.error.details,
+    hint: locationResult.error.hint,
+  });
+
+  const legacyResult = await supabase
+    .from("service_requests")
+    .select(JOB_COLUMNS)
+    .eq("professional_id", professionalId)
+    .order("created_at", { ascending: false });
+
+  return {
+    ...legacyResult,
+    data: legacyResult.data?.map((job) => ({
+      ...job,
+      latitude: null,
+      longitude: null,
+    })),
+  };
+}
+
 const nextStatus: Partial<Record<JobStatus, JobStatus>> = {
   assigned: "in_progress",
   in_progress: "completed",
@@ -70,13 +107,7 @@ function ProfessionalDashboardContent() {
         return;
       }
 
-      const { data, error: queryError } = await supabase
-        .from("service_requests")
-        .select(
-          "id, customer_name, customer_mobile, service, problem_description, country, state, district, city, area, pincode, address, preferred_time, status, created_at, latitude, longitude"
-        )
-        .eq("professional_id", professionalId)
-        .order("created_at", { ascending: false });
+      const { data, error: queryError } = await fetchJobs(professionalId);
 
       const { data: professionalLocation, error: professionalLocationError } = await supabase
         .from("professionals")

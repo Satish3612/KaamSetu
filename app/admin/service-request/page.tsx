@@ -41,6 +41,76 @@ type ServiceRequest = {
   longitude: number | null;
 };
 
+type SupabaseError = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+const SERVICE_REQUEST_COLUMNS = `
+  id,
+  service_id,
+  service,
+  professional_id,
+  customer_name,
+  customer_mobile,
+  problem_description,
+  country,
+  state,
+  district,
+  city,
+  area,
+  pincode,
+  address,
+  preferred_time,
+  status,
+  created_at,
+  updated_at
+`;
+
+const SERVICE_REQUEST_LOCATION_COLUMNS = `${SERVICE_REQUEST_COLUMNS}, latitude, longitude`;
+
+function logSupabaseError(context: string, queryError: SupabaseError) {
+  console.error(context, {
+    code: queryError.code,
+    message: queryError.message,
+    details: queryError.details,
+    hint: queryError.hint,
+  });
+}
+
+function isMissingLocationColumnError(queryError: SupabaseError | null) {
+  return queryError?.code === "42703" &&
+    /service_requests\.(latitude|longitude)/.test(queryError.message || "");
+}
+
+async function fetchServiceRequests() {
+  const locationResult = await supabase
+    .from("service_requests")
+    .select(SERVICE_REQUEST_LOCATION_COLUMNS)
+    .order("created_at", { ascending: false });
+
+  if (!isMissingLocationColumnError(locationResult.error)) {
+    return locationResult;
+  }
+
+  logSupabaseError("Service request optional location columns unavailable:", locationResult.error!);
+  const legacyResult = await supabase
+    .from("service_requests")
+    .select(SERVICE_REQUEST_COLUMNS)
+    .order("created_at", { ascending: false });
+
+  return {
+    ...legacyResult,
+    data: legacyResult.data?.map((request) => ({
+      ...request,
+      latitude: null,
+      longitude: null,
+    })),
+  };
+}
+
 export default function AdminServiceRequestPage() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,41 +131,10 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
     setLoading(true);
     setError("");
 
-    const { data, error } = await supabase
-      .from("service_requests")
-      .select(
-        `
-        id,
-        service_id,
-        professional_id,
-        customer_name,
-        customer_mobile,
-        problem_description,
-        country,
-        state,
-        district,
-        city,
-        area,
-        pincode,
-        address,
-        preferred_time,
-        status,
-        created_at,
-        updated_at,
-        latitude,
-        longitude
-        `
-      )
-      .order("created_at", { ascending: false });
+    const { data, error } = await fetchServiceRequests();
 
    if (error) {
-  const errorText = JSON.stringify(
-    error,
-    Object.getOwnPropertyNames(error),
-    2
-  );
-
-  console.error("SERVICE REQUEST ERROR:", errorText);
+  logSupabaseError("Service request load error:", error);
   setError("Service requests load nahi ho pa rahi hain. Kripya dobara koshish karein.");
   setRequests([]);
   setLoading(false);
@@ -213,47 +252,14 @@ const [assigningId, setAssigningId] = useState<string | null>(null);
     let cancelled = false;
 
     async function loadInitialRequests() {
-      const { data, error: requestError } = await supabase
-        .from("service_requests")
-        .select(
-          `
-        id,
-        service_id,
-        service,
-        service,
-        professional_id,
-        customer_name,
-        customer_mobile,
-        problem_description,
-        country,
-        state,
-        district,
-        city,
-        area,
-        pincode,
-        address,
-        preferred_time,
-        status,
-        created_at,
-        updated_at,
-        latitude,
-        longitude
-        `
-        )
-        .order("created_at", { ascending: false });
+      const { data, error: requestError } = await fetchServiceRequests();
 
       if (cancelled) {
         return;
       }
 
       if (requestError) {
-        const errorText = JSON.stringify(
-          requestError,
-          Object.getOwnPropertyNames(requestError),
-          2
-        );
-
-        console.error("SERVICE REQUEST ERROR:", errorText);
+        logSupabaseError("Service request initial load error:", requestError);
         setError("Service requests load nahi ho pa rahi hain. Kripya dobara koshish karein.");
         setRequests([]);
       } else {
