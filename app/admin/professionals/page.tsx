@@ -12,6 +12,7 @@ type Profile = { id: string; full_name: string; mobile: string; status: string }
 type Service = { id: string; name: string };
 type Action = "approve" | "reject" | "deactivate" | "reactivate";
 type PendingAction = { professional: Professional; action: Action } | null;
+type SupabaseError = { code?: string; message?: string; details?: string; hint?: string };
 
 const modalContent: Record<Action, { title: string; message: string; confirmLabel: string; tone: "warning" | "positive" }> = {
   approve: { title: "Approve Professional?", message: "This professional will be verified and eligible to appear in public listings.", confirmLabel: "Approve", tone: "positive" },
@@ -22,6 +23,15 @@ const modalContent: Record<Action, { title: string; message: string; confirmLabe
 
 function normalizedVerification(status: string) {
   return status === "blocked" ? "verified" : status;
+}
+
+function logSupabaseError(context: string, error: SupabaseError) {
+  console.error(context, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
 }
 
 export default function AdminProfessionalsPage() {
@@ -69,7 +79,7 @@ export default function AdminProfessionalsPage() {
       const profile = profiles[professional.profile_id];
       const verification = normalizedVerification(professional.verification_status);
       const isActiveVerified = verification === "verified" && profile?.status === "active";
-      const isBlockedVerified = verification === "verified" && profile?.status !== "active";
+      const isBlockedVerified = verification === "verified" && ["blocked", "inactive"].includes(profile?.status || "");
       const matchesFilter = filter === "all" || (filter === "verified" && isActiveVerified) || (filter === "blocked" && isBlockedVerified) || (filter === "pending" && verification === "pending") || (filter === "rejected" && verification === "rejected");
       const matchesSearch = !term || [profile?.full_name, profile?.mobile, professional.skills].some((value) => value?.toLowerCase().includes(term));
       return matchesFilter && matchesSearch;
@@ -82,11 +92,11 @@ export default function AdminProfessionalsPage() {
   }
 
   async function updateProfileStatus(professional: Professional, status: "active" | "blocked" | "pending") {
-    return supabase.from("profiles").update({ status, updated_at: new Date().toISOString() }).eq("id", professional.profile_id).select("id, status").single();
+    return supabase.from("profiles").update({ status, updated_at: new Date().toISOString() }).eq("id", professional.profile_id);
   }
 
   async function updateVerificationStatus(professional: Professional, status: "verified" | "rejected") {
-    return supabase.from("professionals").update({ verification_status: status, updated_at: new Date().toISOString() }).eq("id", professional.id).select("id, verification_status").single();
+    return supabase.from("professionals").update({ verification_status: status, updated_at: new Date().toISOString() }).eq("id", professional.id);
   }
 
   async function performAction() {
@@ -100,7 +110,7 @@ export default function AdminProfessionalsPage() {
       const profileStatus = action === "deactivate" ? "blocked" : "active";
       const profileResult = await updateProfileStatus(professional, profileStatus);
       if (profileResult.error) {
-        console.error("Professional account status update error:", profileResult.error);
+        logSupabaseError("Professional account status update error:", profileResult.error);
         setMessage("Professional account update nahi hua. Kripya dobara koshish karein.");
         setUpdatingId(null); return;
       }
@@ -108,7 +118,7 @@ export default function AdminProfessionalsPage() {
       if (action === "reactivate" && oldVerification === "blocked") {
         const repairResult = await updateVerificationStatus(professional, "verified");
         if (repairResult.error) {
-          console.error("Legacy professional verification repair error:", repairResult.error);
+          logSupabaseError("Legacy professional verification repair error:", repairResult.error);
           await updateProfileStatus(professional, oldProfileStatus === "active" ? "active" : "blocked");
           setMessage("Professional account update nahi hua. Kripya dobara koshish karein.");
           setUpdatingId(null); return;
@@ -122,13 +132,13 @@ export default function AdminProfessionalsPage() {
       const nextProfileStatus = action === "approve" ? "active" : "blocked";
       const profileResult = await updateProfileStatus(professional, nextProfileStatus);
       if (profileResult.error) {
-        console.error("Professional profile update error:", profileResult.error);
+        logSupabaseError("Professional profile update error:", profileResult.error);
         setMessage("Professional verification update nahi hua. Kripya dobara koshish karein.");
         setUpdatingId(null); return;
       }
       const verificationResult = await updateVerificationStatus(professional, nextVerification);
       if (verificationResult.error) {
-        console.error("Professional verification update error:", verificationResult.error);
+        logSupabaseError("Professional verification update error:", verificationResult.error);
         await updateProfileStatus(professional, oldProfileStatus === "active" ? "active" : oldProfileStatus === "pending" ? "pending" : "blocked");
         setMessage("Professional verification update nahi hua. Kripya dobara koshish karein.");
         setUpdatingId(null); return;
