@@ -37,22 +37,7 @@ function getErrorMessage(error: unknown) {
   return "Unable to load professionals.";
 }
 
-async function fetchActiveProfessionals(): Promise<Professional[]> {
-  const { data: profiles, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, full_name, mobile, status")
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
-
-  if (profileError) {
-    throw profileError;
-  }
-
-  if (!profiles || profiles.length === 0) {
-    return [];
-  }
-
-  const profileIds = profiles.map((profile) => profile.id);
+async function fetchActiveProfessionals(serviceId: string): Promise<Professional[]> {
   const { data: professionalData, error: professionalError } = await supabase
     .from("professionals")
     .select(
@@ -69,10 +54,27 @@ async function fetchActiveProfessionals(): Promise<Professional[]> {
           pincode
         `
     )
-    .in("profile_id", profileIds);
+    .eq("verification_status", "verified")
+    .eq("service_id", serviceId);
 
   if (professionalError) {
     throw professionalError;
+  }
+
+  if (!professionalData || professionalData.length === 0) {
+    return [];
+  }
+
+  const profileIds = professionalData.map((professional) => professional.profile_id);
+  const { data: profiles, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, full_name, mobile, status")
+    .in("id", profileIds)
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (profileError) {
+    throw profileError;
   }
 
   return profiles.flatMap((profile) => {
@@ -109,10 +111,17 @@ export default function ProfessionalsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const serviceId = new URLSearchParams(window.location.search).get("serviceId");
 
     async function loadInitialProfessionals() {
+      if (!serviceId) {
+        setError("Please select a service first.");
+        setLoading(false);
+        return;
+      }
+
       try {
-        const data = await fetchActiveProfessionals();
+        const data = await fetchActiveProfessionals(serviceId);
 
         if (!cancelled) {
           setProfessionals(data);
@@ -247,12 +256,12 @@ export default function ProfessionalsPage() {
       );
       window.sessionStorage.setItem(
         "selectedServiceId",
-        professional.service_id || ""
+        professional.service_id!
       );
       router.push(
         `/service-request?professionalId=${professional.id}&professionalName=${encodeURIComponent(
           professional.full_name
-        )}&serviceId=${professional.service_id || ""}`
+        )}&serviceId=${encodeURIComponent(professional.service_id!)}`
       );
     }
   }

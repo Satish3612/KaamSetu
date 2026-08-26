@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 
@@ -9,34 +9,71 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 );
 
-function getSelectedValue(queryParameter: string, storageKey: string) {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const queryValue = new URLSearchParams(window.location.search).get(
-    queryParameter
-  );
-
-  return queryValue || window.sessionStorage.getItem(storageKey);
-}
-
 export default function ServiceRequest() {
   const [submitted, setSubmitted] = useState(false);
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [selectedServiceName, setSelectedServiceName] = useState("");
+  const [selectedProfessionalName, setSelectedProfessionalName] = useState("");
+  const [selectionLoading, setSelectionLoading] = useState(true);
+  const [selectionError, setSelectionError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const searchParams = new URLSearchParams(window.location.search);
+    const professionalId =
+      searchParams.get("professionalId") ||
+      window.sessionStorage.getItem("selectedProfessionalId") ||
+      "";
+    const serviceId =
+      searchParams.get("serviceId") ||
+      window.sessionStorage.getItem("selectedServiceId") ||
+      "";
+
+    async function loadSelectedService() {
+      setSelectedProfessionalId(professionalId);
+      setSelectedServiceId(serviceId);
+      setSelectedProfessionalName(searchParams.get("professionalName") || "");
+
+      if (!professionalId || !serviceId) {
+        setSelectionError("Please select a service first.");
+        setSelectionLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("services")
+        .select("name")
+        .eq("id", serviceId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Unable to load selected service:", error);
+        setSelectionError("Selected service load nahi ho pa rahi hai. Please select again.");
+      } else if (!data) {
+        setSelectionError("Selected service is no longer available. Please select again.");
+      } else {
+        setSelectedServiceName(data.name);
+      }
+
+      setSelectionLoading(false);
+    }
+
+    void loadSelectedService();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
   event.preventDefault();
 
   const form = event.currentTarget;
   const formData = new FormData(form);
-  const selectedProfessionalId = getSelectedValue(
-    "professionalId",
-    "selectedProfessionalId"
-  );
-  const selectedServiceId = getSelectedValue(
-    "serviceId",
-    "selectedServiceId"
-  );
 
   // Check: professional selected hai ya nahi
   if (!selectedProfessionalId) {
@@ -46,7 +83,12 @@ export default function ServiceRequest() {
 
   // Check: service selected hai ya nahi
   if (!selectedServiceId) {
-    alert("Service ID nahi mili. Please service ko dobara select karein.");
+    alert("Please select a service first.");
+    return;
+  }
+
+  if (!selectedServiceName || selectionError) {
+    alert(selectionError || "Selected service load nahi hui. Please select again.");
     return;
   }
 
@@ -86,7 +128,7 @@ export default function ServiceRequest() {
       customer_mobile: formData.get("mobile") as string,
 
       // Service
-      service: formData.get("service") as string,
+      service: selectedServiceName,
 
       // Problem
       problem: formData.get("problem") as string,
@@ -248,18 +290,20 @@ export default function ServiceRequest() {
                 Service Required *
               </label>
 
-              <select
-                required
+              <input
+                readOnly
                 name="service"
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="">Select a service</option>
-                <option>Electrician</option>
-                <option>Plumber</option>
-                <option>AC / RO Repair</option>
-                <option>CCTV / Wi-Fi / Network</option>
-                <option>Computer / Mobile Repair</option>
-              </select>
+                value={selectionLoading ? "Service load ho rahi hai..." : selectedServiceName}
+                className="w-full rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-slate-700"
+              />
+              {selectedProfessionalName && (
+                <p className="mt-2 text-sm text-slate-500">
+                  Selected professional: {selectedProfessionalName}
+                </p>
+              )}
+              {selectionError && (
+                <p className="mt-2 text-sm text-red-700">{selectionError}</p>
+              )}
             </div>
           </section>
 
@@ -461,6 +505,7 @@ export default function ServiceRequest() {
           {/* Submit */}
           <button
             type="submit"
+            disabled={selectionLoading || Boolean(selectionError)}
             className="w-full rounded-xl bg-blue-700 py-4 text-lg font-bold text-white transition hover:bg-blue-800"
           >
             Find Verified Expert

@@ -1,6 +1,11 @@
-import Link from "next/link";
+"use client";
 
-const services = [
+import { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+const serviceCards = [
   {
     icon: "⚡",
     name: "Electrician",
@@ -28,6 +33,17 @@ const services = [
   },
 ];
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+);
+
+type Service = {
+  id: string;
+  name: string;
+  description: string | null;
+};
+
 const trustPoints = [
   "Verified Professionals",
   "Transparent Service",
@@ -36,6 +52,50 @@ const trustPoints = [
 ];
 
 export default function Home() {
+  const [activeServices, setActiveServices] = useState<Service[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [servicesError, setServicesError] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadServices() {
+      const { data, error } = await supabase
+        .from("services")
+        .select("id, name, description")
+        .eq("status", "active")
+        .order("name");
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Unable to load active services:", error);
+        setServicesError("Services load nahi ho pa rahi hain. Kripya dobara koshish karein.");
+      } else {
+        setActiveServices(data ?? []);
+      }
+
+      setServicesLoading(false);
+    }
+
+    void loadServices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function findExperts(serviceId = selectedServiceId) {
+    if (!serviceId) {
+      alert("Please select a service first.");
+      return;
+    }
+
+    router.push(`/professionals?serviceId=${encodeURIComponent(serviceId)}`);
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       {/* Header */}
@@ -96,11 +156,23 @@ export default function Home() {
               <div className="flex flex-col gap-3 md:flex-row">
                 <div className="flex flex-1 items-center rounded-xl border border-slate-200 px-4">
                   <span className="mr-3 text-xl">🔍</span>
-                  <input
-                    type="text"
-                    placeholder="Aapko kya kaam karwana hai?"
+                  <select
+                    value={selectedServiceId}
+                    onChange={(event) => setSelectedServiceId(event.target.value)}
+                    disabled={servicesLoading}
                     className="w-full bg-transparent py-4 outline-none placeholder:text-slate-400"
-                  />
+                  >
+                    <option value="">
+                      {servicesLoading
+                        ? "Services load ho rahi hain..."
+                        : "Aapko kya kaam karwana hai?"}
+                    </option>
+                    {activeServices.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex items-center rounded-xl border border-slate-200 px-4 md:w-56">
@@ -111,7 +183,11 @@ export default function Home() {
                   </select>
                 </div>
 
-                <button className="rounded-xl bg-blue-700 px-7 py-4 font-semibold text-white transition hover:bg-blue-800">
+                <button
+                  type="button"
+                  onClick={() => findExperts()}
+                  className="rounded-xl bg-blue-700 px-7 py-4 font-semibold text-white transition hover:bg-blue-800"
+                >
                   Find Expert
                 </button>
               </div>
@@ -146,26 +222,35 @@ export default function Home() {
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
-          {services.map((service) => (
+          {servicesError && (
+            <p className="col-span-full text-center text-red-700">{servicesError}</p>
+          )}
+          {activeServices.map((service) => {
+            const card = serviceCards.find((item) => item.name === service.name);
+
+            return (
             <button
-              key={service.name}
+              key={service.id}
+              type="button"
+              onClick={() => findExperts(service.id)}
               className="group rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg"
             >
-              <div className="mb-5 text-4xl">{service.icon}</div>
+              <div className="mb-5 text-4xl">{card?.icon ?? "\u{1F527}"}</div>
 
               <h3 className="text-lg font-bold group-hover:text-blue-700">
                 {service.name}
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                {service.description}
+                {service.description || card?.description || "Verified professional service"}
               </p>
 
               <div className="mt-5 text-sm font-semibold text-blue-700">
                 Find Expert →
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       </section>
 
